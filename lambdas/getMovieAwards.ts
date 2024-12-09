@@ -78,6 +78,16 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
                     },
                   };
                 }
+
+                if ("min" in queryParams) {
+                  const min = queryParams.min ? parseInt(queryParams.min) : NaN;
+                  if (!isNaN(min) && min > 0) {
+                    commandInput = {
+                      ...commandInput,
+                      Limit: min,
+                    };
+                  }
+                }
               } else {
                 commandInput = {
                   ...commandInput,
