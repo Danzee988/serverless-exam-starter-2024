@@ -32,6 +32,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
         body: JSON.stringify({ Message: "Missing movie Id" }),
       };
     }
+
     const queryParams = event.queryStringParameters;
     if (queryParams && !isValidQueryParams(queryParams)) {
       return {
@@ -45,6 +46,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
         }),
       };
     }
+    
     let commandInput: QueryCommandInput = {
       TableName: process.env.TABLE_NAME,
     };

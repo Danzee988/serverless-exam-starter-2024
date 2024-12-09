@@ -1,24 +1,17 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { Movie, MovieAward } from "../shared/types";
+import { MovieAwardQueryParams } from "../shared/types";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
   QueryCommand,
   QueryCommandInput,
-  GetCommand,
 } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
 import schema from "../shared/types.schema.json";
 
-type ResponseBody = {
-  data: {
-    movieAward: MovieAward;
-  };
-};
-
 const ajv = new Ajv({ coerceTypes: true });
 const isValidQueryParams = ajv.compile(
-  schema.definitions["MovieQueryParams"] || {}
+  schema.definitions["MovieAwardQueryParams"] || {}
 );
 
 const ddbDocClient = createDDbDocClient();
@@ -45,7 +38,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
             };
           } 
 
-            if (!movieAward) {
+        if (!movieAward) {
                 return {
                 statusCode: 404,
                 headers: {
@@ -55,69 +48,69 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
                 };
             }
 
-        const getCommandOutput = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.MOVIES_TABLE_NAME,
-                Key: { movieId: movieId},
-            })
-        );
-        if (!getCommandOutput.Item) {
-            return {
-                statusCode: 404,
+            const queryParams = event.queryStringParameters;
+            if (queryParams && !isValidQueryParams(queryParams)) {
+              return {
+                statusCode: 500,
                 headers: {
-                "content-type": "application/json",
+                  "content-type": "application/json",
                 },
-                body: JSON.stringify({ Message: "Invalid movie Id" }),
-            };
-        }
-        const body: ResponseBody = {
-            data: { movieAward: getCommandOutput.Item as MovieAward },
-        };
+                body: JSON.stringify({
+                  message: `Incorrect type. Must match Query parameters schema`,
+                  schema: schema.definitions["MovieAwardQueryParams"],
+                }),
+              };
+            }
 
-        const queryParams = event.queryStringParameters;
-        if (isValidQueryParams(queryParams)) {
-          let queryCommandInput: QueryCommandInput = {
-            TableName: process.env.AWARDS_TABLE_NAME,
-          };
-          queryCommandInput = {
-            ...queryCommandInput,
-            KeyConditionExpression: "movieId = :m",
-            ExpressionAttributeValues: {
-              ":m": movieId,
-            },
-          };
-          const queryCommandOutput = await ddbDocClient.send(
-            new QueryCommand(queryCommandInput)
-          );
-          if (queryCommandOutput.Items && queryCommandOutput.Items.length > 0) {
-            body.data.movieAward = queryCommandOutput.Items[0] as MovieAward;
-          } else {
-            return {
-              statusCode: 404,
-              headers: {
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({ Message: "No awards found for the movie" }),
-            };
-          }
-        }
-        return {
-          statusCode: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(body),
-        };
-    } catch (error: any) {
-        console.log(JSON.stringify(error));
-        return {
-          statusCode: 500,
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ error}),
-    };
-}
+            let commandInput: QueryCommandInput = {
+                TableName: process.env.AWARDS_TABLE_NAME,
+              };
+
+              if (queryParams) {
+                if ("awardBody" in queryParams) {
+                  commandInput = {
+                    ...commandInput,
+                    IndexName: "roleIx",
+                    KeyConditionExpression: "movieId = :m and begins_with(awardBody, :r) ",
+                    ExpressionAttributeValues: {
+                      ":m": movieId,
+                      ":r": queryParams.awardBody,
+                    },
+                  };
+                }
+              } else {
+                commandInput = {
+                  ...commandInput,
+                  KeyConditionExpression: "movieId = :m",
+                  ExpressionAttributeValues: {
+                    ":m": movieId,
+                  },
+                };
+              }
+
+              const commandOutput = await ddbDocClient.send(
+                new QueryCommand(commandInput)
+              );
+
+              return {
+                statusCode: 200,
+                headers: {
+                  "content-type": "application/json",
+                },
+                body: JSON.stringify({
+                  data: commandOutput.Items,
+                }),
+              };
+            } catch (error: any) {
+              console.log(JSON.stringify(error));
+              return {
+                statusCode: 500,
+                headers: {
+                  "content-type": "application/json",
+                },
+                body: JSON.stringify({ error }),
+              };
+            }
 };
 
 function createDDbDocClient() {

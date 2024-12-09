@@ -25,6 +25,10 @@ export type Movie = {
     roleName?: string
   }
 
+  export type MovieAwardQueryParams = {
+    awardBody?: string;
+  }
+
   export type MovieQueryParams = {
     cast?: boolean;
   }
